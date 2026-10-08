@@ -1,0 +1,2039 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuantumShield | Real-Time Cryptographic Observability Platform</title>
+  <meta name="description" content="Real-time cryptographic observability for cloud-native systems transitioning to a post-quantum future. Monitor cipher suites, TLS downgrade fallbacks, cryptographic drift, and HNDL exposure.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            background: '#060A13',
+            surface: {
+              DEFAULT: '#0B1222',
+              light: '#111D36',
+              card: '#0D1629',
+              border: '#1B2A4A',
+            },
+            cyan: {
+              DEFAULT: '#00F0FF',
+              glow: '#00D8F6',
+              dim: '#007A87',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- React 18 & Babel Standalone for Seamless Execution without Local Node Installation -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Custom CSS for Cyberpunk Grid & Animations -->
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      background-color: #060a13;
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      overflow-x: hidden;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .cyber-grid {
+      background-image: 
+        linear-gradient(to right, rgba(30, 41, 59, 0.22) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(30, 41, 59, 0.22) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    @keyframes flowDash {
+      to {
+        stroke-dashoffset: -30;
+      }
+    }
+    .animate-flow {
+      stroke-dasharray: 6 6;
+      animation: flowDash 1.5s linear infinite;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn {
+      animation: fadeIn 0.25s ease-out forwards;
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080d19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e2c48;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00f0ff88;
+    }
+  </style>
+</head>
+<body class="bg-[#060A13] text-slate-100 antialiased selection:bg-cyan-500/30 selection:text-cyan-200">
+  <div id="root"></div>
+
+  <!-- Main React Application Script -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // --- MOCK TELEMETRY DATA ---
+    const SERVICES_DATA = [
+      {
+        id: 'api-gw',
+        name: 'API Gateway',
+        category: 'gateway',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v3.12.4',
+        lastObserved: '1s ago',
+        riskScore: 24,
+        pqcStatus: 'HYBRID',
+        riskLevel: 'LOW',
+        incomingCount: 18,
+        outgoingCount: 7,
+        lastTransition: '2026-10-07 09:12:00 (Hybrid KEM enabled)',
+        pos: { x: 450, y: 70 },
+        description: 'Envoy-based ingress proxy routing edge traffic with X25519+ML-KEM hybrid key negotiation.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'X25519Kyber768Draft00 (Hybrid)',
+          pqcAlgorithm: 'ML-KEM-768 (FIPS 203)',
+          signatureAlgorithm: 'ML-DSA-65 / RSA-4096 Hybrid',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'auth-svc',
+        name: 'Auth Service',
+        category: 'auth',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v2.8.1',
+        lastObserved: '3s ago',
+        riskScore: 68,
+        pqcStatus: 'CLASSICAL',
+        riskLevel: 'HIGH',
+        incomingCount: 6,
+        outgoingCount: 3,
+        lastTransition: '2026-10-05 14:02:11 (Cert renewal)',
+        pos: { x: 260, y: 200 },
+        description: 'OAuth2/OIDC token broker handling session validation. Currently lacking quantum-safe KEM.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_CHACHA20_POLY1305_SHA256',
+          keyExchange: 'X25519 (Classical)',
+          pqcAlgorithm: 'None',
+          signatureAlgorithm: 'ECDSA P-256',
+          hybridStatus: false,
+          kemCategory: 'Classic-Only',
+          hndlVulnerable: true,
+          entropyBits: 128,
+        },
+      },
+      {
+        id: 'user-svc',
+        name: 'User Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v4.1.0',
+        lastObserved: '2s ago',
+        riskScore: 21,
+        pqcStatus: 'PQC_READY',
+        riskLevel: 'LOW',
+        incomingCount: 4,
+        outgoingCount: 2,
+        lastTransition: '2026-10-06 18:30:00 (Migrated to ML-KEM-768)',
+        pos: { x: 450, y: 220 },
+        description: 'User profile, metadata store, and GDPR deletion orchestrator running Go 1.24 quantum stack.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ML-KEM-768 + X25519',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ML-DSA-65',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'payment-svc',
+        name: 'Payment Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v1.9.4',
+        lastObserved: 'Just now',
+        riskScore: 92,
+        pqcStatus: 'VULNERABLE',
+        riskLevel: 'CRITICAL',
+        incomingCount: 3,
+        outgoingCount: 4,
+        lastTransition: '2026-10-07 14:21:09 (Fallback downgrade to RSA)',
+        pos: { x: 670, y: 210 },
+        description: 'Credit card vault & settlement pipeline. ALERT: Reverted to RSA-2048 fallback in recent deploy.',
+        crypto: {
+          tlsVersion: 'TLS 1.2',
+          cipherSuite: 'ECDHE-RSA-AES256-GCM-SHA384',
+          keyExchange: 'RSA-2048 (Classical Ephemeral fallback)',
+          pqcAlgorithm: 'None (Downgraded)',
+          signatureAlgorithm: 'RSA-2048 PKCS#1 v1.5',
+          hybridStatus: false,
+          kemCategory: 'None',
+          hndlVulnerable: true,
+          entropyBits: 112,
+        },
+      },
+      {
+        id: 'order-svc',
+        name: 'Order Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v2.19.0',
+        lastObserved: '5s ago',
+        riskScore: 19,
+        pqcStatus: 'PQC_READY',
+        riskLevel: 'LOW',
+        incomingCount: 5,
+        outgoingCount: 3,
+        lastTransition: '2026-10-04 11:15:20 (BoringSSL PQC enabled)',
+        pos: { x: 860, y: 200 },
+        description: 'Transaction state coordinator, checkout workflows, and idempotency tracking.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ML-KEM-768 + X25519',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ML-DSA-65',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'inventory-svc',
+        name: 'Inventory Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v2.3.2',
+        lastObserved: '12s ago',
+        riskScore: 28,
+        pqcStatus: 'HYBRID',
+        riskLevel: 'LOW',
+        incomingCount: 2,
+        outgoingCount: 1,
+        lastTransition: '2026-10-02 08:00:00 (Upgraded to TLS 1.3)',
+        pos: { x: 880, y: 370 },
+        description: 'Real-time SKU availability, warehouse allocations, and supplier stock sync.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_128_GCM_SHA256',
+          keyExchange: 'SecP256r1MLKEM768 (Hybrid)',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ECDSA P-256',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 192,
+        },
+      },
+      {
+        id: 'recommendation-eng',
+        name: 'Recommendation Engine',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v5.0.2',
+        lastObserved: '8s ago',
+        riskScore: 35,
+        pqcStatus: 'HYBRID',
+        riskLevel: 'MEDIUM',
+        incomingCount: 1,
+        outgoingCount: 2,
+        lastTransition: '2026-09-28 17:14:00 (Hybrid KEM deployment)',
+        pos: { x: 120, y: 360 },
+        description: 'Vector-search candidate retrieval and customer intent scoring.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'X25519Kyber768Draft00',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ML-DSA-65',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'notification-svc',
+        name: 'Notification Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v1.4.1',
+        lastObserved: '10s ago',
+        riskScore: 48,
+        pqcStatus: 'CLASSICAL',
+        riskLevel: 'MEDIUM',
+        incomingCount: 4,
+        outgoingCount: 2,
+        lastTransition: '2026-09-15 10:20:00 (Baseline TLS 1.3)',
+        pos: { x: 310, y: 370 },
+        description: 'Multi-channel outbound dispatch (SMS, Webhooks, Push, transactional email).',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_128_GCM_SHA256',
+          keyExchange: 'X25519',
+          pqcAlgorithm: 'None',
+          signatureAlgorithm: 'ECDSA P-256',
+          hybridStatus: false,
+          kemCategory: 'Classic-Only',
+          hndlVulnerable: true,
+          entropyBits: 128,
+        },
+      },
+      {
+        id: 'analytics-svc',
+        name: 'Analytics Service',
+        category: 'app',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v3.7.0',
+        lastObserved: '4s ago',
+        riskScore: 25,
+        pqcStatus: 'HYBRID',
+        riskLevel: 'LOW',
+        incomingCount: 3,
+        outgoingCount: 2,
+        lastTransition: '2026-10-01 12:44:00 (eBPF telemetry linked)',
+        pos: { x: 500, y: 370 },
+        description: 'High-throughput clickstream aggregation and OLAP query proxy.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ML-KEM-768 + X25519',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ML-DSA-65',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'redis-cache',
+        name: 'Redis Cache Cluster',
+        category: 'data',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v7.2.4',
+        lastObserved: '1s ago',
+        riskScore: 32,
+        pqcStatus: 'PQC_READY',
+        riskLevel: 'LOW',
+        incomingCount: 7,
+        outgoingCount: 0,
+        lastTransition: '2026-10-03 04:00:00 (TLS tunnel mTLS ML-KEM)',
+        pos: { x: 230, y: 530 },
+        description: 'Distributed ephemeral token session cache protected via envoy sidecar mTLS.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ML-KEM-1024 + X448',
+          pqcAlgorithm: 'ML-KEM-1024',
+          signatureAlgorithm: 'ML-DSA-87',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-1024',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'postgres-db',
+        name: 'PostgreSQL Primary',
+        category: 'data',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v16.2',
+        lastObserved: '2s ago',
+        riskScore: 74,
+        pqcStatus: 'CLASSICAL',
+        riskLevel: 'HIGH',
+        incomingCount: 5,
+        outgoingCount: 0,
+        lastTransition: '2026-08-11 20:10:00 (Static cert setup)',
+        pos: { x: 670, y: 530 },
+        description: 'Core relational cluster. Lacks post-quantum key exchange; sensitive PII stored within.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ECDHE-P384 (Classical)',
+          pqcAlgorithm: 'None',
+          signatureAlgorithm: 'RSA-3072',
+          hybridStatus: false,
+          kemCategory: 'Classic-Only',
+          hndlVulnerable: true,
+          entropyBits: 192,
+        },
+      },
+      {
+        id: 'kafka-queue',
+        name: 'Kafka Event Mesh',
+        category: 'queue',
+        environment: 'prod-us-east-1',
+        deploymentVersion: 'v3.6.1',
+        lastObserved: '1s ago',
+        riskScore: 22,
+        pqcStatus: 'PQC_READY',
+        riskLevel: 'LOW',
+        incomingCount: 8,
+        outgoingCount: 6,
+        lastTransition: '2026-10-05 22:00:00 (Post-quantum broker mTLS)',
+        pos: { x: 450, y: 530 },
+        description: 'Enterprise event backbone with mutual TLS post-quantum handshakes on all partitions.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_256_GCM_SHA384',
+          keyExchange: 'ML-KEM-768 + X25519',
+          pqcAlgorithm: 'ML-KEM-768',
+          signatureAlgorithm: 'ML-DSA-65',
+          hybridStatus: true,
+          kemCategory: 'ML-KEM-768',
+          hndlVulnerable: false,
+          entropyBits: 256,
+        },
+      },
+      {
+        id: 'ext-payment-api',
+        name: 'External Payment Gateway',
+        category: 'external',
+        environment: 'external-saas',
+        deploymentVersion: 'api.stripe.com/v1',
+        lastObserved: '6s ago',
+        riskScore: 85,
+        pqcStatus: 'VULNERABLE',
+        riskLevel: 'CRITICAL',
+        incomingCount: 1,
+        outgoingCount: 0,
+        lastTransition: '2026-10-07 14:21:09 (Negotiated RSA-2048)',
+        pos: { x: 910, y: 530 },
+        description: 'Third-party banking API. Rejects post-quantum ClientHello extensions, forcing classical fallback.',
+        crypto: {
+          tlsVersion: 'TLS 1.2',
+          cipherSuite: 'ECDHE-RSA-AES256-GCM-SHA384',
+          keyExchange: 'RSA-2048',
+          pqcAlgorithm: 'None',
+          signatureAlgorithm: 'SHA256withRSA',
+          hybridStatus: false,
+          kemCategory: 'None',
+          hndlVulnerable: true,
+          entropyBits: 112,
+        },
+      },
+      {
+        id: 'idp-okta',
+        name: 'Identity Provider (Okta)',
+        category: 'external',
+        environment: 'external-saas',
+        deploymentVersion: 'auth0.okta.prod',
+        lastObserved: '14s ago',
+        riskScore: 58,
+        pqcStatus: 'CLASSICAL',
+        riskLevel: 'HIGH',
+        incomingCount: 1,
+        outgoingCount: 0,
+        lastTransition: '2026-09-01 12:00:00 (Standard TLS 1.3 ECDHE)',
+        pos: { x: 50, y: 200 },
+        description: 'Federated identity provider. Standard ECDHE key exchange without quantum-resistant extensions.',
+        crypto: {
+          tlsVersion: 'TLS 1.3',
+          cipherSuite: 'TLS_AES_128_GCM_SHA256',
+          keyExchange: 'X25519',
+          pqcAlgorithm: 'None',
+          signatureAlgorithm: 'ECDSA P-256',
+          hybridStatus: false,
+          kemCategory: 'Classic-Only',
+          hndlVulnerable: true,
+          entropyBits: 128,
+        },
+      },
+    ];
+
+    const CONNECTIONS_DATA = [
+      { id: 'e-gw-auth', source: 'api-gw', target: 'auth-svc', protocol: 'TLS 1.3', cipher: 'TLS_CHACHA20_POLY1305_SHA256', keyExchange: 'X25519', pqc: 'None', mode: 'Classical', risk: 'HIGH' },
+      { id: 'e-gw-user', source: 'api-gw', target: 'user-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-gw-pay', source: 'api-gw', target: 'payment-svc', protocol: 'TLS 1.2', cipher: 'ECDHE-RSA-AES256-GCM-SHA384', keyExchange: 'RSA-2048', pqc: 'None', mode: 'Vulnerable', risk: 'CRITICAL' },
+      { id: 'e-gw-order', source: 'api-gw', target: 'order-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-auth-idp', source: 'auth-svc', target: 'idp-okta', protocol: 'TLS 1.3', cipher: 'TLS_AES_128_GCM_SHA256', keyExchange: 'X25519', pqc: 'None', mode: 'Classical', risk: 'HIGH' },
+      { id: 'e-auth-redis', source: 'auth-svc', target: 'redis-cache', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-1024 + X448', pqc: 'ML-KEM-1024', mode: 'Pure PQC', risk: 'LOW' },
+      { id: 'e-user-db', source: 'user-svc', target: 'postgres-db', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ECDHE-P384', pqc: 'None', mode: 'Classical', risk: 'HIGH' },
+      { id: 'e-pay-ext', source: 'payment-svc', target: 'ext-payment-api', protocol: 'TLS 1.2', cipher: 'ECDHE-RSA-AES256-GCM-SHA384', keyExchange: 'RSA-2048', pqc: 'None', mode: 'Vulnerable', risk: 'CRITICAL' },
+      { id: 'e-pay-kafka', source: 'payment-svc', target: 'kafka-queue', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-order-kafka', source: 'order-svc', target: 'kafka-queue', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-order-inv', source: 'order-svc', target: 'inventory-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_128_GCM_SHA256', keyExchange: 'SecP256r1MLKEM768', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-kafka-notif', source: 'kafka-queue', target: 'notification-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_128_GCM_SHA256', keyExchange: 'X25519', pqc: 'None', mode: 'Classical', risk: 'MEDIUM' },
+      { id: 'e-kafka-analytics', source: 'kafka-queue', target: 'analytics-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+      { id: 'e-recom-analytics', source: 'recommendation-eng', target: 'analytics-svc', protocol: 'TLS 1.3', cipher: 'TLS_AES_256_GCM_SHA384', keyExchange: 'ML-KEM-768 + X25519', pqc: 'ML-KEM-768', mode: 'Hybrid', risk: 'LOW' },
+    ];
+
+    const DRIFT_EVENTS = [
+      {
+        id: 'drift-001',
+        timeLabel: '14:21:11',
+        serviceName: 'Payment Service',
+        previousState: 'TLS 1.3 / ML-KEM-768+X25519 / AES-256-GCM',
+        currentState: 'TLS 1.2 / RSA-2048 fallback / AES-256-GCM',
+        severity: 'CRITICAL',
+        title: 'Classical Fallback & Cipher Downgrade',
+        description: 'Payment Service renegotiated downstream TLS connection to external gateway without PQC extensions.',
+        actorOrCause: 'Deployment canary trigger v1.9.4 & legacy peer SSL handshake rejection',
+        riskDelta: +68,
+        recommendedAction: 'Enforce strict TLS 1.3 ClientHello with mandatory Kyber extension group [0x6399].',
+      },
+      {
+        id: 'drift-002',
+        timeLabel: '14:19:00',
+        serviceName: 'Payment Service',
+        previousState: 'Risk Score 24 (LOW)',
+        currentState: 'Risk Score 92 (CRITICAL)',
+        severity: 'WARNING',
+        title: 'Composite Cryptographic Risk Elevation',
+        description: 'Entropy and post-quantum resistance scored down after non-hybrid session negotiation.',
+        actorOrCause: 'Automated Posture Engine heuristic threshold breach',
+        riskDelta: +45,
+        recommendedAction: 'Isolate vulnerable ingress channel or route through PQC-terminating proxy.',
+      },
+      {
+        id: 'drift-003',
+        timeLabel: '14:18:12',
+        serviceName: 'Payment Service',
+        previousState: 'Negotiated ML-KEM-768',
+        currentState: 'Classical X25519 / RSA fallback observed',
+        severity: 'CRITICAL',
+        title: 'Classical Fallback Observed',
+        description: 'Server rejected ML-KEM KeyShare extension, initiating classical ephemeral fallback.',
+        actorOrCause: 'TLS renegotiation fallback behavior',
+        riskDelta: +32,
+        recommendedAction: 'Check OpenSSL 3.4 provider configuration and liboqs shared library link.',
+      },
+      {
+        id: 'drift-004',
+        timeLabel: '14:17:00',
+        serviceName: 'Payment Service',
+        previousState: 'Pod v1.9.3 (stable)',
+        currentState: 'Pod v1.9.4 rollout detected',
+        severity: 'CHANGE',
+        title: 'Container Deployment Detected',
+        description: 'ArgoCD synchronized deployment revision commit 8a9f24b with updated TLS configmap.',
+        actorOrCause: 'CI/CD Automated Deployment pipeline',
+        riskDelta: 0,
+        recommendedAction: 'Monitor handshake entropy across new replica sets.',
+      },
+      {
+        id: 'drift-005',
+        timeLabel: '10:08:34',
+        serviceName: 'Order Service',
+        previousState: 'TLS 1.3 / X25519',
+        currentState: 'TLS 1.3 / Hybrid ML-KEM-768+X25519 enabled',
+        severity: 'NORMAL',
+        title: 'Hybrid ML-KEM-768 Successfully Enabled',
+        description: 'Handshake upgraded to FIPS 203 standardized Kyber post-quantum key encapsulation.',
+        actorOrCause: 'PQC Migration Policy Wave-3 automation',
+        riskDelta: -35,
+        recommendedAction: 'Maintain monitoring; verify signature migration to ML-DSA-65.',
+      },
+      {
+        id: 'drift-006',
+        timeLabel: '10:02:11',
+        serviceName: 'Order Service',
+        previousState: 'TLS 1.2 / RSA-2048',
+        currentState: 'TLS 1.3 / X25519 / AES-256-GCM',
+        severity: 'NORMAL',
+        title: 'Legacy Protocol Deprecated',
+        description: 'Deprecated TLS 1.2 handshake disabled on ingress port 8443.',
+        actorOrCause: 'Ingress security baseline update',
+        riskDelta: -20,
+        recommendedAction: 'All clients successfully reconnected over TLS 1.3.',
+      },
+    ];
+
+    const RISK_ENDPOINTS = [
+      { id: 'r1', endpoint: 'payments.internal', service: 'Payment Service', algorithm: 'RSA-2048', pqcStatus: 'VULNERABLE', risk: 'CRITICAL', reason: 'Legacy key exchange via automated fallback; active downgrade vulnerability', lastSeen: '12s ago', hndlScore: 94, recommendation: 'Force TLS 1.3 ClientHello with X25519Kyber768' },
+      { id: 'r2', endpoint: 'api.stripe.com/v1', service: 'External Payment Gateway', algorithm: 'ECDHE-RSA-2048', pqcStatus: 'VULNERABLE', risk: 'CRITICAL', reason: 'Upstream vendor endpoint drops post-quantum key shares', lastSeen: '25s ago', hndlScore: 89, recommendation: 'Wrap external egress in PQC terminating bastion proxy' },
+      { id: 'r3', endpoint: 'auth.internal', service: 'Auth Service', algorithm: 'X25519', pqcStatus: 'CLASSICAL', risk: 'HIGH', reason: 'No PQC support; session tokens exposed to Harvest Now, Decrypt Later', lastSeen: '3s ago', hndlScore: 78, recommendation: 'Enable ML-KEM-768 hybrid key exchange in envoy sidecar' },
+      { id: 'r4', endpoint: 'postgres.internal:5432', service: 'PostgreSQL Primary', algorithm: 'ECDHE-P384', pqcStatus: 'CLASSICAL', risk: 'HIGH', reason: 'Database wire protocol lacks lattice KEM; unencrypted secrets in transit', lastSeen: '2s ago', hndlScore: 72, recommendation: 'Inject Envoy proxy with mutual TLS PQC encapsulation' },
+      { id: 'r5', endpoint: 'notify.internal', service: 'Notification Service', algorithm: 'X25519', pqcStatus: 'CLASSICAL', risk: 'MEDIUM', reason: 'Classical curve without hybrid guard; low sensitivity metadata', lastSeen: '18s ago', hndlScore: 41, recommendation: 'Schedule Wave-4 rollout for hybrid key share support' },
+      { id: 'r6', endpoint: 'orders.internal', service: 'Order Service', algorithm: 'ML-KEM-768 + X25519', pqcStatus: 'HYBRID', risk: 'LOW', reason: 'PQC protected with hybrid forward secrecy (NIST FIPS 203)', lastSeen: '5s ago', hndlScore: 12, recommendation: 'Optimal configuration; verify automated cert rotation' },
+      { id: 'r7', endpoint: 'users.internal', service: 'User Service', algorithm: 'ML-KEM-768 + X25519', pqcStatus: 'PQC_READY', risk: 'LOW', reason: 'Fully compliant PQC key encapsulation & ML-DSA-65 auth', lastSeen: 'Just now', hndlScore: 8, recommendation: 'Reference gold standard deployment' },
+      { id: 'r8', endpoint: 'kafka.internal:9092', service: 'Kafka Event Mesh', algorithm: 'ML-KEM-768 + X25519', pqcStatus: 'PQC_READY', risk: 'LOW', reason: 'mTLS cluster mesh hardened against quantum harvesting', lastSeen: 'Just now', hndlScore: 9, recommendation: 'Monitor per-topic partition encryption throughput' },
+    ];
+
+    const PROBLEM_CARDS = [
+      { id: 'p1', code: 'BLINDSPOT #01', title: 'Active Cipher Suites & TLS Invisibility', description: 'Network APM tools inspect packets and latencies, but fail to inspect which cipher suites and curve groups were negotiated during TLS handshakes.', impact: 'Security teams cannot verify whether traffic uses 128-bit vs 256-bit encryption or broken primitives.' },
+      { id: 'p2', code: 'BLINDSPOT #02', title: 'PQC Adoption & Hybrid Scheme Gaps', description: 'Enterprises struggle to answer: "Which microservices actually speak ML-KEM-768 today?" There is no automated inventory of quantum-resistant vs classical connections.', impact: 'Blind compliance audits and slow, guesswork-driven migration to NIST post-quantum standards.' },
+      { id: 'p3', code: 'BLINDSPOT #03', title: 'Silent Algorithm Transitions & Renegotiation', description: 'Microservice pods rotate certificates, update base images, and restart with different TLS settings without notifying central security monitoring or generating alerts.', impact: 'Cryptographic drift goes completely undetected until an external audit or exploit.' },
+      { id: 'p4', code: 'BLINDSPOT #04', title: 'TLS Downgrade Fallback Vulnerabilities', description: 'When modern PQC handshakes encounter legacy intermediaries, automatic downgrade mechanisms silently drop to classical RSA without triggering standard application errors.', impact: 'Services unknowingly fall back into quantum-vulnerable cryptography while thinking they are secure.' },
+      { id: 'p5', code: 'BLINDSPOT #05', title: 'Cryptographic Drift Over Deployments', description: 'CI/CD pipelines push ephemeral containers that override OpenSSL providers, revert cipher priority lists, and introduce unvetted third-party crypto dependencies.', impact: 'Zero visibility into how routine engineering deployments alter the real-world attack surface.' },
+      { id: 'p6', code: 'BLINDSPOT #06', title: 'Harvest Now, Decrypt Later (HNDL) Exposure', description: 'Nation-state threat actors intercept and hoard encrypted high-value enterprise traffic today, waiting for fault-tolerant quantum computers to break classical asymmetric keys.', impact: 'Financial transactions, healthcare records, and identity tokens captured now will be decrypted later.' },
+    ];
+
+    const HOW_IT_WORKS = [
+      { num: '01', title: 'DISCOVER', heading: 'Zero-Touch Service Discovery', description: 'Continuously discover services and encrypted communication paths across Kubernetes clusters.', engine: 'eBPF kernel taps detect sockets the instant a container spins up.' },
+      { num: '02', title: 'OBSERVE', heading: 'Capture Cryptographic Metadata', description: 'Capture fine-grained cryptographic parameters from active TLS handshakes without decrypting payload traffic.', engine: 'Extracts cipher suites, TLS protocol versions, KeyShare extensions, and signatures.' },
+      { num: '03', title: 'MAP', heading: 'Build Communication Graph', description: 'Construct and continuously update a live topological graph of inter-service encrypted communication.', engine: 'Visualizes exact crypto security boundaries, distinguishing quantum-safe hybrid channels.' },
+      { num: '04', title: 'ANALYZE', heading: 'Evaluate Algorithms & Schemes', description: 'Evaluate active cryptographic configurations against NIST FIPS 203 (ML-KEM) and CNSA 2.0 standards.', engine: 'Audits key exchange entropy, hybrid fallback safety, and cert chains.' },
+      { num: '05', title: 'DETECT', heading: 'Identify Drift & Downgrades', description: 'Pinpoint cryptographic drift, automatic downgrade events, and rogue cipher negotiations immediately.', engine: 'Triggers instant alerts when deployments revert from hybrid ML-KEM to classical RSA.' },
+      { num: '06', title: 'PRIORITIZE', heading: 'Rank Endpoints & HNDL Risk', description: 'Calculate composite risk scores based on data sensitivity, transaction volume, and HNDL vulnerability.', engine: 'Generates prescriptive remediation playbooks for DevSecOps.' },
+    ];
+
+    const ARCHITECTURE_STEPS = [
+      { title: 'Cloud Native Workloads', sub: 'Kubernetes / Istio / Envoy', spec: 'Polyglot Pods', desc: 'Containerized microservices and ingress routers running distributed workloads.' },
+      { title: 'Telemetry / eBPF Tap', sub: 'Kernel-Level Socket Hook', spec: '<0.2% CPU Overhead', desc: 'Non-invasive eBPF probes capturing TLS ClientHello and ServerHello extensions.' },
+      { title: 'Metadata Collector', sub: 'Zero-Payload Extraction', spec: 'Zero Data Ingestion', desc: 'Extracts cipher suite IDs, KeyShare extensions, and certificate serials without payload.' },
+      { title: 'Event Stream Mesh', sub: 'Kafka / Redpanda Ingestion', spec: '100K+ Events/sec', desc: 'Sub-millisecond ingestion pipeline routing cryptographic telemetry to stream engines.' },
+      { title: 'Graph Engine', sub: 'Dynamic Mesh Topology', spec: 'In-Memory Graph DB', desc: 'Constructs live inter-service cryptographic topology with dynamic protocol classification.' },
+      { title: 'Crypto Analysis Engine', sub: 'NIST & CNSA 2.0 Validator', spec: 'FIPS 203/204 Engine', desc: 'Validates key exchanges, hybrid modes, and certificate signatures against PQC specs.' },
+      { title: 'Drift & Anomaly Detection', sub: 'Continuous Regression Trap', spec: 'Real-time Alerting', desc: 'Detects unexpected cipher regressions, sudden fallback handshakes, and unapproved crypto transitions.' },
+      { title: 'Risk Intelligence & SOC', sub: 'Observability Dashboard', spec: 'WebSocket Push', desc: 'Unified console delivering real-time cryptographic posture, HNDL risk, and audit reports.' },
+    ];
+
+    // --- APPLICATION ROOT COMPONENT ---
+    function App() {
+      const [currentView, setCurrentView] = useState('landing');
+      const [isIncidentModalOpen, setIsIncidentModalOpen] = useState(false);
+      const [selectedNodeId, setSelectedNodeId] = useState('payment-svc');
+      const [filterStatus, setFilterStatus] = useState('ALL');
+      const [searchQuery, setSearchQuery] = useState('');
+      const [zoomLevel, setZoomLevel] = useState(1);
+      const [filterRisk, setFilterRisk] = useState('ALL');
+      const [riskSearch, setRiskSearch] = useState('');
+      const [selectedRiskEndpoint, setSelectedRiskEndpoint] = useState(null);
+      const [hndlLiveScore, setHndlLiveScore] = useState(18.4);
+      const [toastMsg, setToastMsg] = useState(null);
+
+      // Fluctuate HNDL score slightly for living telemetry feeling
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setHndlLiveScore(+(18.4 + (Math.random() * 0.4 - 0.2)).toFixed(1));
+        }, 5000);
+        return () => clearInterval(interval);
+      }, []);
+
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(null), 3500);
+      };
+
+      const selectedNode = useMemo(() => {
+        return SERVICES_DATA.find((n) => n.id === selectedNodeId) || null;
+      }, [selectedNodeId]);
+
+      const nodeConnections = useMemo(() => {
+        if (!selectedNodeId) return { incoming: [], outgoing: [] };
+        return {
+          incoming: CONNECTIONS_DATA.filter((e) => e.target === selectedNodeId),
+          outgoing: CONNECTIONS_DATA.filter((e) => e.source === selectedNodeId),
+        };
+      }, [selectedNodeId]);
+
+      const filteredGraphNodes = useMemo(() => {
+        return SERVICES_DATA.filter((n) => {
+          const matchFilter = filterStatus === 'ALL' || n.pqcStatus === filterStatus;
+          const matchSearch = n.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              n.crypto.pqcAlgorithm.toLowerCase().includes(searchQuery.toLowerCase());
+          return matchFilter && matchSearch;
+        });
+      }, [filterStatus, searchQuery]);
+
+      const filteredRiskList = useMemo(() => {
+        return RISK_ENDPOINTS.filter((item) => {
+          const matchRisk = filterRisk === 'ALL' || item.risk === filterRisk;
+          const matchText = item.endpoint.toLowerCase().includes(riskSearch.toLowerCase()) ||
+                            item.service.toLowerCase().includes(riskSearch.toLowerCase());
+          return matchRisk && matchText;
+        });
+      }, [filterRisk, riskSearch]);
+
+      const scrollTo = (id) => {
+        if (currentView === 'dashboard') {
+          setCurrentView('landing');
+          setTimeout(() => {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        } else {
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-[#060A13] text-slate-100 flex flex-col font-sans">
+          
+          {/* TOAST POPUP */}
+          {toastMsg && (
+            <div className="fixed bottom-6 right-6 z-50 p-4 rounded-xl bg-slate-900 border border-cyan-500/80 text-cyan-300 font-mono text-xs shadow-2xl flex items-center space-x-3 animate-fadeIn">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+              <span>{toastMsg}</span>
+            </div>
+          )}
+
+          {/* TOP NAVIGATION */}
+          <header className="sticky top-0 z-40 bg-[#060A13]/90 backdrop-blur-md border-b border-[#1B2A4A]">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+              
+              {/* Brand */}
+              <div 
+                onClick={() => { setCurrentView('landing'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="flex items-center space-x-3 cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-600/30 border border-cyan-400/50 flex items-center justify-center text-cyan-400 group-hover:border-cyan-300 transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)]">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg font-bold tracking-tight text-white group-hover:text-cyan-300 transition-colors">
+                      Quantum<span className="text-cyan-400">Shield</span>
+                    </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 uppercase font-semibold">
+                      v2.4 PQC
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-medium">Cryptographic Observability Platform</div>
+                </div>
+              </div>
+
+              {/* Navigation Items */}
+              <nav className="hidden md:flex items-center space-x-1 lg:space-x-2 text-xs font-mono">
+                <button onClick={() => scrollTo('overview')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Overview</button>
+                <button onClick={() => scrollTo('posture')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Cryptographic Posture</button>
+                <button onClick={() => scrollTo('service-graph')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Service Graph</button>
+                <button onClick={() => scrollTo('drift-detection')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Crypto Drift</button>
+                <button onClick={() => scrollTo('risk-intelligence')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Risk Intelligence</button>
+                <button onClick={() => scrollTo('architecture')} className="px-3 py-1.5 text-slate-300 hover:text-cyan-300 rounded hover:bg-slate-800/50">Architecture</button>
+              </nav>
+
+              {/* Right Side Buttons */}
+              <div className="flex items-center space-x-3">
+                <div className="hidden sm:flex items-center space-x-2 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-700 text-xs font-mono">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-emerald-400 font-bold text-[11px]">LIVE SYSTEM</span>
+                  <span className="text-slate-600">|</span>
+                  <span className="text-slate-400 text-[10px]">98.4K pkts/s</span>
+                </div>
+
+                <button
+                  onClick={() => setIsIncidentModalOpen(true)}
+                  className="hidden lg:flex items-center space-x-1 px-2.5 py-1.5 rounded text-xs font-mono text-amber-300 bg-amber-950/40 border border-amber-600/50 hover:bg-amber-900/40"
+                >
+                  <span>⚡ Incident Sim</span>
+                </button>
+
+                {currentView === 'landing' ? (
+                  <button
+                    onClick={() => { setCurrentView('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 transition-all shadow-[0_0_15px_rgba(0,240,255,0.35)] active:scale-95 flex items-center space-x-1.5"
+                  >
+                    <span>Open Dashboard</span>
+                    <span>→</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { setCurrentView('landing'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-cyan-300 bg-cyan-950/60 border border-cyan-500/50 hover:bg-cyan-900/50 transition-all"
+                  >
+                    <span>Product Overview</span>
+                  </button>
+                )}
+              </div>
+
+            </div>
+          </header>
+
+          {/* MAIN VIEW CONTENT */}
+          <main className="flex-1">
+            
+            {/* If in DASHBOARD mode, show top SOC controls bar */}
+            {currentView === 'dashboard' && (
+              <div className="bg-[#0B1222] border-b border-[#1B2A4A] px-4 sm:px-6 lg:px-8 py-3">
+                <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center space-x-4 text-xs font-mono">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span className="text-white font-bold">SOC OPERATIONS CONSOLE</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-cyan-400">14/14 eBPF Probes Synced</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-emerald-400">NIST FIPS 203 Validated</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => showToast('[eBPF Probe] Captured TLS 1.3 Handshake: ML-KEM-768 negotiated on user-svc')}
+                      className="px-3 py-1.5 rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold hover:bg-cyan-900/60 transition-colors"
+                    >
+                      ▶ Simulate Handshake Event
+                    </button>
+                    <button
+                      onClick={() => setIsIncidentModalOpen(true)}
+                      className="px-3 py-1.5 rounded bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs font-mono font-bold hover:bg-rose-900/60 transition-colors shadow-[0_0_12px_rgba(239,68,68,0.2)]"
+                    >
+                      ⚡ Trigger Downgrade Alert
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* HERO SECTION (Always in Landing, or at top) */}
+            {currentView === 'landing' && (
+              <section id="overview" className="relative pt-12 pb-20 overflow-hidden border-b border-[#1B2A4A]/60">
+                <div className="absolute inset-0 cyber-grid opacity-40 pointer-events-none"></div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                    
+                    {/* Left Headline */}
+                    <div className="lg:col-span-7 space-y-6 text-left">
+                      <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                        <span>NIST FIPS 203 / 204 COMPLIANCE OBSERVABILITY</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-400">eBPF TELEMETRY</span>
+                      </div>
+
+                      <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.12]">
+                        See Every Cryptographic Decision Across Your{' '}
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-indigo-400">
+                          Cloud.
+                        </span>
+                      </h1>
+
+                      <p className="text-lg sm:text-xl text-slate-300 max-w-2xl leading-relaxed">
+                        Real-time cryptographic observability for cloud-native systems transitioning to a post-quantum future. Continuously detect cipher drift, TLS renegotiation fallbacks, and Harvest Now, Decrypt Later (HNDL) exposure across every microservice.
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-4 pt-2">
+                        <button
+                          onClick={() => scrollTo('posture')}
+                          className="px-6 py-3.5 rounded-lg font-bold text-sm text-slate-950 bg-gradient-to-r from-cyan-400 to-cyan-300 hover:from-cyan-300 hover:to-cyan-200 transition-all shadow-[0_0_25px_rgba(0,240,255,0.35)] active:scale-95 flex items-center space-x-2"
+                        >
+                          <span>Explore Cryptographic Posture</span>
+                          <span>→</span>
+                        </button>
+                        <button
+                          onClick={() => scrollTo('service-graph')}
+                          className="px-6 py-3.5 rounded-lg font-semibold text-sm text-cyan-300 bg-slate-900/90 border border-slate-700/80 hover:border-cyan-500/60 hover:bg-slate-800/80 transition-all"
+                        >
+                          View Service Graph
+                        </button>
+                      </div>
+
+                      <div className="pt-4 grid grid-cols-3 gap-4 border-t border-slate-800 text-xs text-slate-400 font-mono">
+                        <div className="flex items-center space-x-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400"></span><span>Zero Payload Tap</span></div>
+                        <div className="flex items-center space-x-1.5"><span className="w-2 h-2 rounded-full bg-cyan-400"></span><span>Sub-ms eBPF Hook</span></div>
+                        <div className="flex items-center space-x-1.5"><span className="w-2 h-2 rounded-full bg-amber-400"></span><span>Downgrade Trap</span></div>
+                      </div>
+                    </div>
+
+                    {/* Right Hero Interactive Diagram */}
+                    <div className="lg:col-span-5">
+                      <div className="rounded-2xl bg-gradient-to-b from-[#0B1222] to-[#070B14] border border-[#1B2A4A] p-5 shadow-2xl relative overflow-hidden">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+                          <span className="text-slate-300 font-bold">TOPOLOGY // LIVE TELEMETRY</span>
+                          <span className="text-emerald-400">● eBPF ACTIVE</span>
+                        </div>
+
+                        {/* Interactive Hero Mesh Preview */}
+                        <div className="relative w-full h-[320px] my-2 select-none">
+                          <svg className="w-full h-full" viewBox="0 0 500 320">
+                            {/* Lines */}
+                            <line x1="250" y1="40" x2="110" y2="130" stroke="#F59E0B" strokeWidth="2" strokeDasharray="none" />
+                            <line x1="250" y1="40" x2="250" y2="140" stroke="#10B981" strokeWidth="2" />
+                            <line x1="250" y1="40" x2="390" y2="130" stroke="#EF4444" strokeWidth="2.5" strokeDasharray="4 4" />
+                            <line x1="110" y1="130" x2="120" y2="260" stroke="#F59E0B" strokeWidth="2" />
+                            <line x1="250" y1="140" x2="250" y2="260" stroke="#10B981" strokeWidth="2" />
+                            <line x1="390" y1="130" x2="390" y2="260" stroke="#EF4444" strokeWidth="2.5" strokeDasharray="4 4" />
+                            <line x1="390" y1="130" x2="250" y2="260" stroke="#06B6D4" strokeWidth="2" />
+
+                            {/* Moving packet dots */}
+                            <circle r="3" fill="#10B981"><animateMotion path="M250,40 L250,140" dur="2s" repeatCount="indefinite" /></circle>
+                            <circle r="3.5" fill="#EF4444"><animateMotion path="M250,40 L390,130" dur="1.4s" repeatCount="indefinite" /></circle>
+                            <circle r="3" fill="#F59E0B"><animateMotion path="M250,40 L110,130" dur="2.4s" repeatCount="indefinite" /></circle>
+
+                            {/* Node cards in Hero */}
+                            {[
+                              { name: 'API Gateway', sub: 'Hybrid PQC', x: 250, y: 40, col: '#06B6D4' },
+                              { name: 'Auth Service', sub: 'Classical', x: 110, y: 130, col: '#F59E0B' },
+                              { name: 'User Service', sub: 'ML-KEM-768', x: 250, y: 140, col: '#10B981' },
+                              { name: 'Payment Service', sub: 'Fallback RSA', x: 390, y: 130, col: '#EF4444' },
+                              { name: 'Database', sub: 'ECDHE-P384', x: 120, y: 260, col: '#F59E0B' },
+                              { name: 'Message Queue', sub: 'ML-KEM Mesh', x: 250, y: 260, col: '#10B981' },
+                              { name: 'External API', sub: 'RSA-2048', x: 390, y: 260, col: '#EF4444' },
+                            ].map((n, i) => (
+                              <g key={i} transform={`translate(${n.x}, ${n.y})`} className="cursor-pointer">
+                                {n.col === '#EF4444' && (
+                                  <circle r="22" fill="none" stroke="#EF4444" opacity="0.6">
+                                    <animate attributeName="r" values="18;28;18" dur="2s" repeatCount="indefinite" />
+                                    <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2s" repeatCount="indefinite" />
+                                  </circle>
+                                )}
+                                <rect x="-56" y="-18" width="112" height="36" rx="6" fill="#0D1629" stroke={n.col} strokeWidth="1.2" />
+                                <circle cx="-42" cy="0" r="3.5" fill={n.col} />
+                                <text x="-32" y="-2" fill="#FFFFFF" fontSize="10" fontWeight="bold">{n.name}</text>
+                                <text x="-32" y="9" fill="#94A3B8" fontSize="8.5" fontFamily="JetBrains Mono, monospace">{n.sub}</text>
+                              </g>
+                            ))}
+                          </svg>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800 grid grid-cols-4 gap-1 text-[10px] font-mono text-center">
+                          <span className="text-emerald-400">● PQC Ready</span>
+                          <span className="text-cyan-400">● Hybrid PQC</span>
+                          <span className="text-amber-400">● Classical</span>
+                          <span className="text-rose-400">● Vulnerable</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* PROBLEM SECTION */}
+            {currentView === 'landing' && (
+              <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+                    <span className="px-3 py-1 rounded-full bg-rose-950/50 border border-rose-600/40 text-rose-300 text-xs font-mono font-bold">
+                      THE OBSERVABILITY BLINDSPOT
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
+                      Your Observability Stack Sees Traffic.{' '}
+                      <span className="text-rose-400 underline decoration-rose-500/50 decoration-wavy">
+                        Not Cryptography.
+                      </span>
+                    </h2>
+                    <p className="text-slate-300 text-base sm:text-lg">
+                      Conventional monitoring tools expose HTTP latencies and host CPU, but leave your enterprise completely blind to negotiated ciphers, key exchanges, and post-quantum readiness:
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {PROBLEM_CARDS.map((card) => (
+                      <div key={card.id} className="rounded-xl bg-[#0B1222] border border-[#1B2A4A] hover:border-cyan-500/50 p-6 flex flex-col justify-between transition-all group shadow-lg">
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 font-bold">
+                              {card.code}
+                            </span>
+                            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                          </div>
+                          <h3 className="text-lg font-bold text-white group-hover:text-cyan-300 transition-colors mb-2">
+                            {card.title}
+                          </h3>
+                          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
+                            {card.description}
+                          </p>
+                        </div>
+                        <div className="pt-3 border-t border-slate-800/80 text-[11px] font-mono text-rose-400">
+                          <strong>CRITICAL IMPACT:</strong> {card.impact}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* LIVE POSTURE METRICS BAR (6 METRIC CARDS) */}
+            <div className="py-10 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center space-x-3 text-xs font-mono">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-white font-bold tracking-wider">LIVE CRYPTOGRAPHIC POSTURE</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-400">CLUSTER: <strong className="text-cyan-400 font-mono">prod-us-east-k8s</strong></span>
+                  </div>
+                  <div className="text-xs font-mono text-slate-400">
+                    TAP SAMPLING: <span className="text-slate-200">500ms continuous</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {[
+                    { label: 'Total Services', val: '42', sub: 'Across 3 clusters', col: 'text-white', border: 'border-cyan-500/30' },
+                    { label: 'PQC Ready', val: '24', sub: '57.1% ML-KEM-768', col: 'text-emerald-400', border: 'border-emerald-500/30' },
+                    { label: 'Hybrid PQC', val: '9', sub: '21.4% dual-guard', col: 'text-cyan-400', border: 'border-cyan-500/30' },
+                    { label: 'Legacy Crypto', val: '6', sub: 'Classical ECC/RSA', col: 'text-amber-400', border: 'border-amber-500/30' },
+                    { label: 'High Risk Endpoints', val: '3', sub: '1 active fallback', col: 'text-rose-400', border: 'border-rose-500/40' },
+                    { label: 'HNDL Exposure', val: `${hndlLiveScore}%`, sub: 'Adversary exfiltration', col: 'text-rose-400', border: 'border-rose-500/30' },
+                  ].map((m, idx) => (
+                    <div key={idx} className={`rounded-xl bg-[#0B1222] border ${m.border} p-4 flex flex-col justify-between hover:scale-[1.02] transition-transform`}>
+                      <div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block mb-1">
+                          {m.label}
+                        </span>
+                        <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${m.col}`}>
+                          {m.val}
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-800 text-[10px] font-mono text-slate-400 truncate">
+                        {m.sub}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </div>
+
+            {/* CRYPTOGRAPHIC POSTURE: CIRCULAR GAUGE 78% + HISTORICAL TREND */}
+            <section id="posture" className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                  <div>
+                    <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium mb-3 inline-block">
+                      POSTURE EVALUATION MATRIX
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                      Overall Cryptographic Posture
+                    </h2>
+                    <p className="text-slate-400 text-sm sm:text-base mt-2 max-w-2xl">
+                      Continuous assessment against NIST FIPS 203, CNSA 2.0 timeline, and quantum forward secrecy benchmarks.
+                    </p>
+                  </div>
+                  <div className="text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-cyan-400">
+                    TARGET: ≥ 90% BY Q4 2026
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  
+                  {/* Gauge Card */}
+                  <div className="lg:col-span-5 rounded-2xl bg-gradient-to-b from-[#0B1222] to-[#080D19] border border-[#1B2A4A] p-8 flex flex-col items-center justify-between text-center shadow-xl">
+                    <div className="w-full text-left">
+                      <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">OVERALL POSTURE SCORE</span>
+                      <h3 className="text-xl font-bold text-white mt-1">Post-Quantum Readiness</h3>
+                    </div>
+
+                    {/* Circular 78% SVG Progress Gauge */}
+                    <div className="relative w-60 h-60 my-4 flex items-center justify-center">
+                      <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
+                        <circle cx="100" cy="100" r="78" fill="none" stroke="#17233D" strokeWidth="16" />
+                        {/* Vulnerable (8%) */}
+                        <circle cx="100" cy="100" r="78" fill="none" stroke="#EF4444" strokeWidth="16" strokeDasharray="39.2 451" strokeDashoffset="-451" strokeLinecap="round" />
+                        {/* Classical (14%) */}
+                        <circle cx="100" cy="100" r="78" fill="none" stroke="#F59E0B" strokeWidth="16" strokeDasharray="68.6 421" strokeDashoffset="-382" strokeLinecap="round" />
+                        {/* Hybrid (21%) */}
+                        <circle cx="100" cy="100" r="78" fill="none" stroke="#06B6D4" strokeWidth="16" strokeDasharray="102.9 387" strokeDashoffset="-279" strokeLinecap="round" />
+                        {/* PQC Ready (57%) */}
+                        <circle cx="100" cy="100" r="78" fill="none" stroke="#10B981" strokeWidth="16" strokeDasharray="279.3 211" strokeDashoffset="0" strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                        <span className="text-5xl font-black font-mono text-white tracking-tight">78<span className="text-cyan-400 text-3xl">%</span></span>
+                        <span className="text-xs font-mono font-bold text-emerald-400 mt-1">RESILIENT POSTURE</span>
+                        <span className="text-[11px] text-slate-500 font-mono">33 of 42 Services Safe</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-slate-400 text-left">
+                      ⚠ Readiness dipped by <strong className="text-rose-400">-3%</strong> after Payment Service classical fallback renegotiation.
+                    </div>
+                  </div>
+
+                  {/* Breakdown & Trend */}
+                  <div className="lg:col-span-7 space-y-6">
+                    <div className="rounded-2xl bg-[#0B1222] border border-[#1B2A4A] p-6 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800 text-xs font-mono">
+                        <span className="font-bold text-white uppercase">Breakdown by Scheme</span>
+                        <span className="text-slate-400">Total: 42 Endpoints</span>
+                      </div>
+                      <div className="space-y-3 font-mono text-xs">
+                        {[
+                          { label: 'PQC Ready', pct: 57, count: '24 services', col: '#10B981' },
+                          { label: 'Hybrid PQC', pct: 21, count: '9 services', col: '#06B6D4' },
+                          { label: 'Classical Only', pct: 14, count: '6 services', col: '#F59E0B' },
+                          { label: 'Vulnerable', pct: 8, count: '3 services', col: '#EF4444' },
+                        ].map((b, i) => (
+                          <div key={i} className="space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-white font-semibold flex items-center space-x-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: b.col }}></span>
+                                <span>{b.label}</span>
+                              </span>
+                              <span className="text-slate-400">{b.count} ({b.pct}%)</span>
+                            </div>
+                            <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${b.pct}%`, backgroundColor: b.col }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Historical Trend Curve */}
+                    <div className="rounded-2xl bg-[#0B1222] border border-[#1B2A4A] p-6 shadow-xl">
+                      <div className="flex items-center justify-between mb-4 text-xs font-mono">
+                        <span className="font-bold text-white uppercase">Readiness Over Time (30 Days)</span>
+                        <span className="text-emerald-400 font-bold">+36% Migration Velocity</span>
+                      </div>
+                      <div className="w-full h-44 relative">
+                        <svg className="w-full h-full" viewBox="0 0 500 150">
+                          <line x1="30" y1="30" x2="480" y2="30" stroke="#1B2A4A" strokeDasharray="3 3" />
+                          <line x1="30" y1="70" x2="480" y2="70" stroke="#1B2A4A" strokeDasharray="3 3" />
+                          <line x1="30" y1="110" x2="480" y2="110" stroke="#1B2A4A" strokeDasharray="3 3" />
+                          {/* Polyline */}
+                          <polyline
+                            fill="none"
+                            stroke="#10B981"
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                            points="50,130 150,100 250,70 350,40 450,55"
+                          />
+                          {[
+                            { x: 50, y: 130, lbl: 'Week 1: 42%' },
+                            { x: 150, y: 100, lbl: 'Week 2: 54%' },
+                            { x: 250, y: 70, lbl: 'Week 3: 68%' },
+                            { x: 350, y: 40, lbl: 'Week 4: 81%' },
+                            { x: 450, y: 55, lbl: 'Current: 78%' },
+                          ].map((pt, i) => (
+                            <g key={i}>
+                              <circle cx={pt.x} cy={pt.y} r={i === 4 ? 6 : 4} fill={i === 4 ? '#F59E0B' : '#10B981'} />
+                              <text x={pt.x} y={pt.y - 10} fill="#FFF" fontSize="10" textAnchor="middle" fontFamily="JetBrains Mono, monospace">
+                                {pt.lbl.split(': ')[1]}
+                              </text>
+                            </g>
+                          ))}
+                        </svg>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* SERVICE COMMUNICATION GRAPH (MAIN FEATURE) */}
+            <section id="service-graph" className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+                  <div>
+                    <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium mb-3 inline-block">
+                      LIVE MESH TOPOLOGY // REACT FLOW ARCHITECTURE
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                      Service Communication Graph
+                    </h2>
+                    <p className="text-slate-400 text-sm sm:text-base mt-2 max-w-2xl">
+                      Real-time interactive inter-service cryptographic map. Click any node to inspect negotiated TLS parameters, key exchange primitives, and cryptographic drift history.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-3 text-xs font-mono bg-[#0B1222] border border-slate-800 p-2.5 rounded-lg text-slate-300">
+                    <span>14 Services</span>
+                    <span className="text-slate-600">|</span>
+                    <span>14 Encrypted Conduits</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-rose-400 font-bold">1 Active Fallback</span>
+                  </div>
+                </div>
+
+                {/* Toolbar */}
+                <div className="bg-[#0B1222] border-t border-x border-[#1B2A4A] rounded-t-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-slate-400 mr-1">FILTER:</span>
+                    {['ALL', 'PQC_READY', 'HYBRID', 'CLASSICAL', 'VULNERABLE'].map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setFilterStatus(st)}
+                        className={`px-2.5 py-1 rounded transition-colors ${
+                          filterStatus === st
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 font-bold'
+                            : 'text-slate-400 hover:text-white bg-slate-900 border border-slate-800'
+                        }`}
+                      >
+                        {st.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      placeholder="Search service/cipher..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 w-44"
+                    />
+                    <div className="flex items-center space-x-1 bg-slate-950 border border-slate-800 rounded p-1 text-slate-400">
+                      <button onClick={() => setZoomLevel((z) => Math.max(0.7, +(z - 0.1).toFixed(1)))} className="px-1.5 py-0.5 hover:text-white">-</button>
+                      <span className="text-[10px] w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
+                      <button onClick={() => setZoomLevel((z) => Math.min(1.4, +(z + 0.1).toFixed(1)))} className="px-1.5 py-0.5 hover:text-white">+</button>
+                      <button onClick={() => setZoomLevel(1)} className="px-1.5 py-0.5 hover:text-white text-[10px]">Reset</button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Graph Viewport and Side Drawer Container */}
+                <div className="relative bg-[#070B14] border border-[#1B2A4A] rounded-b-xl overflow-hidden min-h-[620px] flex">
+                  
+                  {/* Graph Canvas */}
+                  <div className="flex-1 relative overflow-hidden select-none">
+                    <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none"></div>
+
+                    <div className="w-full h-[620px] transition-transform duration-300" style={{ transform: `scale(${zoomLevel})` }}>
+                      <svg className="w-full h-full" viewBox="0 0 1020 620">
+                        {/* Markers */}
+                        <defs>
+                          <marker id="arr-green" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#10B981" />
+                          </marker>
+                          <marker id="arr-cyan" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#06B6D4" />
+                          </marker>
+                          <marker id="arr-amber" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#F59E0B" />
+                          </marker>
+                          <marker id="arr-red" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                            <path d="M 0 1 L 10 5 L 0 9 z" fill="#EF4444" />
+                          </marker>
+                        </defs>
+
+                        {/* Edges */}
+                        {CONNECTIONS_DATA.map((edge) => {
+                          const src = SERVICES_DATA.find((n) => n.id === edge.source);
+                          const tgt = SERVICES_DATA.find((n) => n.id === edge.target);
+                          if (!src || !tgt) return null;
+
+                          let col = '#06B6D4';
+                          let marker = 'arr-cyan';
+                          if (edge.mode === 'Pure PQC') { col = '#10B981'; marker = 'arr-green'; }
+                          if (edge.mode === 'Classical') { col = '#F59E0B'; marker = 'arr-amber'; }
+                          if (edge.mode === 'Vulnerable') { col = '#EF4444'; marker = 'arr-red'; }
+
+                          const isConn = selectedNodeId === edge.source || selectedNodeId === edge.target;
+
+                          return (
+                            <g key={edge.id}>
+                              <line
+                                x1={src.pos.x} y1={src.pos.y}
+                                x2={tgt.pos.x} y2={tgt.pos.y}
+                                stroke={col}
+                                strokeWidth={isConn ? 2.5 : 1.4}
+                                strokeOpacity={isConn || !selectedNodeId ? 0.8 : 0.25}
+                                strokeDasharray={edge.mode === 'Vulnerable' ? '5 4' : 'none'}
+                                markerEnd={`url(#${marker})`}
+                              />
+                              <circle r={edge.mode === 'Vulnerable' ? 3.5 : 2.5} fill={col}>
+                                <animateMotion
+                                  path={`M${src.pos.x},${src.pos.y} L${tgt.pos.x},${tgt.pos.y}`}
+                                  dur={edge.mode === 'Vulnerable' ? '1.8s' : '3s'}
+                                  repeatCount="indefinite"
+                                />
+                              </circle>
+                            </g>
+                          );
+                        })}
+
+                        {/* Nodes */}
+                        {filteredGraphNodes.map((node) => {
+                          const isSel = selectedNodeId === node.id;
+                          const colMap = { PQC_READY: '#10B981', HYBRID: '#06B6D4', CLASSICAL: '#F59E0B', VULNERABLE: '#EF4444' };
+                          const col = colMap[node.pqcStatus];
+
+                          return (
+                            <g
+                              key={node.id}
+                              transform={`translate(${node.pos.x}, ${node.pos.y})`}
+                              onClick={() => setSelectedNodeId(node.id)}
+                              className="cursor-pointer"
+                            >
+                              {(isSel || node.pqcStatus === 'VULNERABLE') && (
+                                <circle r="42" fill="none" stroke={col} opacity="0.5">
+                                  <animate attributeName="r" values="38;48;38" dur="2.5s" repeatCount="indefinite" />
+                                  <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2.5s" repeatCount="indefinite" />
+                                </circle>
+                              )}
+
+                              <rect
+                                x="-68" y="-28" width="136" height="56" rx="8"
+                                fill="#0B1222"
+                                stroke={isSel ? '#00F0FF' : col}
+                                strokeWidth={isSel ? 2.5 : 1.2}
+                              />
+                              <rect x="-68" y="-28" width="4" height="56" rx="2" fill={col} />
+                              <circle cx="-50" cy="-12" r="3" fill={col} />
+
+                              <text x="-40" y="-8" fill="#FFF" fontSize="11" fontWeight="bold">
+                                {node.name.length > 14 ? node.name.slice(0, 12) + '..' : node.name}
+                              </text>
+                              <text x="-50" y="7" fill={col} fontSize="9" fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                                {node.crypto.pqcAlgorithm !== 'None' && !node.crypto.pqcAlgorithm.includes('Downgraded')
+                                  ? node.crypto.pqcAlgorithm.split(' ')[0]
+                                  : node.crypto.keyExchange.split(' ')[0]}
+                              </text>
+                              <text x="-50" y="19" fill="#94A3B8" fontSize="8.5" fontFamily="JetBrains Mono, monospace">
+                                {node.crypto.tlsVersion}
+                              </text>
+                              <text x="54" y="18" fill={col} fontSize="8.5" fontWeight="bold" textAnchor="end" fontFamily="JetBrains Mono, monospace">
+                                {node.riskScore}/100
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+
+                    {/* Canvas Floating Legend */}
+                    <div className="absolute bottom-4 left-4 bg-slate-950/90 border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono flex items-center space-x-3">
+                      <span className="text-emerald-400">● PQC Ready (FIPS 203)</span>
+                      <span className="text-cyan-400">● Hybrid PQC</span>
+                      <span className="text-amber-400">● Classical</span>
+                      <span className="text-rose-400 animate-pulse font-bold">● Vulnerable Fallback</span>
+                    </div>
+                  </div>
+
+                  {/* Right Side Details Panel */}
+                  {selectedNode && (
+                    <div className="w-full sm:w-96 bg-[#0B1222] border-l border-[#1B2A4A] p-6 overflow-y-auto max-h-[620px] shadow-2xl space-y-5">
+                      <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                              {selectedNode.id}
+                            </span>
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              selectedNode.pqcStatus === 'VULNERABLE' ? 'bg-rose-950 text-rose-400 border border-rose-800 animate-pulse' :
+                              selectedNode.pqcStatus === 'PQC_READY' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                              selectedNode.pqcStatus === 'HYBRID' ? 'bg-cyan-950 text-cyan-400 border border-cyan-800' :
+                              'bg-amber-950 text-amber-400 border border-amber-800'
+                            }`}>
+                              {selectedNode.pqcStatus}
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-bold text-white mt-1">{selectedNode.name}</h3>
+                          <p className="text-xs text-slate-400 mt-1 leading-relaxed">{selectedNode.description}</p>
+                        </div>
+                        <button onClick={() => setSelectedNodeId(null)} className="text-slate-400 hover:text-white text-xs font-mono">✕</button>
+                      </div>
+
+                      {/* Risk Score */}
+                      <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between font-mono">
+                        <div>
+                          <span className="text-[10px] text-slate-500 block uppercase">COMPOSITE RISK SCORE</span>
+                          <span className="text-2xl font-bold text-white">{selectedNode.riskScore}<span className="text-xs text-slate-500 font-normal">/100</span></span>
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${
+                          selectedNode.riskLevel === 'CRITICAL' ? 'bg-rose-950 text-rose-400' : 'bg-emerald-950 text-emerald-400'
+                        }`}>
+                          {selectedNode.riskLevel}
+                        </span>
+                      </div>
+
+                      {/* Cryptographic Parameters */}
+                      <div className="space-y-2 text-xs font-mono">
+                        <span className="text-cyan-400 font-bold uppercase text-[11px] block">Cryptographic Metadata</span>
+                        <div className="rounded-xl bg-slate-950 border border-slate-800 divide-y divide-slate-800/80">
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">TLS Version:</span><span className="text-white font-bold">{selectedNode.crypto.tlsVersion}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Cipher Suite:</span><span className="text-cyan-300 text-right text-[11px]">{selectedNode.crypto.cipherSuite}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Key Exchange:</span><span className="text-white text-right">{selectedNode.crypto.keyExchange}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">PQC Algorithm:</span><span className={selectedNode.crypto.pqcAlgorithm.includes('ML-KEM') ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{selectedNode.crypto.pqcAlgorithm}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Signature:</span><span className="text-white">{selectedNode.crypto.signatureAlgorithm}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Hybrid Mode:</span><span className="text-cyan-400">{selectedNode.crypto.hybridStatus ? 'Enabled' : 'Disabled'}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Deployment:</span><span className="text-slate-300">{selectedNode.deploymentVersion}</span></div>
+                          <div className="p-2 flex justify-between"><span className="text-slate-400">Last Seen:</span><span className="text-slate-300">{selectedNode.lastObserved}</span></div>
+                        </div>
+                      </div>
+
+                      {/* Last Transition */}
+                      <div className="text-xs font-mono">
+                        <span className="text-slate-400 block mb-1">LAST CRYPTOGRAPHIC TRANSITION:</span>
+                        <div className="p-2 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
+                          {selectedNode.lastTransition}
+                        </div>
+                      </div>
+
+                      {/* In/Out Conduits */}
+                      <div className="text-xs font-mono space-y-1.5">
+                        <span className="text-slate-400 block">CONNECTED SERVICES:</span>
+                        <div className="text-[11px] text-slate-400">Incoming: {nodeConnections.incoming.map(e => e.source).join(', ') || 'None'}</div>
+                        <div className="text-[11px] text-slate-400">Outgoing: {nodeConnections.outgoing.map(e => e.target).join(', ') || 'None'}</div>
+                      </div>
+
+                      {selectedNode.pqcStatus === 'VULNERABLE' && (
+                        <button
+                          onClick={() => setIsIncidentModalOpen(true)}
+                          className="w-full py-2.5 px-4 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                        >
+                          ⚡ Investigate Downgrade Incident
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* CRYPTOGRAPHIC DRIFT DETECTION */}
+            <section id="drift-detection" className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                  <div>
+                    <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium mb-3 inline-block">
+                      CONTINUOUS RUNTIME BEHAVIOR AUDIT
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                      Cryptographic Drift Detection
+                    </h2>
+                    <p className="text-slate-400 text-sm sm:text-base mt-2 max-w-2xl">
+                      Real-time heuristic engine flagging unintended cipher regressions, unexpected container renewals, and silent TLS negotiation downgrades.
+                    </p>
+                  </div>
+                  <div className="text-xs font-mono text-emerald-400 bg-[#0B1222] border border-slate-800 px-3 py-1.5 rounded-lg">
+                    ● Drift Monitor Active
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-[#0B1222] border border-[#1B2A4A] p-6 sm:p-8 shadow-xl">
+                  <div className="relative pl-6 sm:pl-8 border-l-2 border-slate-800 space-y-6">
+                    {DRIFT_EVENTS.map((evt) => (
+                      <div key={evt.id} className="relative group">
+                        <div className={`absolute -left-[31px] sm:-left-[39px] top-1.5 w-4 h-4 rounded-full border-2 ${
+                          evt.severity === 'CRITICAL' ? 'bg-rose-500 border-rose-400 shadow-[0_0_10px_rgba(239,68,68,0.8)]' :
+                          evt.severity === 'WARNING' ? 'bg-amber-500 border-amber-400' :
+                          evt.severity === 'CHANGE' ? 'bg-cyan-500 border-cyan-400' : 'bg-emerald-500 border-emerald-400'
+                        }`}></div>
+
+                        <div className={`rounded-xl border p-5 ${
+                          evt.severity === 'CRITICAL'
+                            ? 'bg-gradient-to-r from-rose-950/20 to-[#0B1222] border-rose-600/50'
+                            : 'bg-slate-950/60 border-slate-800'
+                        }`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 mb-2 font-mono text-xs">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-cyan-400">{evt.timeLabel}</span>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-white font-semibold">{evt.serviceName}</span>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-slate-400">{evt.actorOrCause}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              evt.severity === 'CRITICAL' ? 'bg-rose-950 text-rose-400 border border-rose-700 animate-pulse' :
+                              evt.severity === 'WARNING' ? 'bg-amber-950 text-amber-400 border border-amber-700' :
+                              evt.severity === 'CHANGE' ? 'bg-cyan-950 text-cyan-400 border border-cyan-700' : 'bg-emerald-950 text-emerald-400 border border-emerald-700'
+                            }`}>
+                              {evt.severity}
+                            </span>
+                          </div>
+
+                          <h3 className="text-base font-bold text-white mb-1">{evt.title}</h3>
+                          <p className="text-xs sm:text-sm text-slate-300 mb-3">{evt.description}</p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono p-3 rounded bg-slate-950 border border-slate-800">
+                            <div><span className="text-slate-500 text-[10px] block">PREVIOUS STATE:</span><span className="text-slate-300">{evt.previousState}</span></div>
+                            <div><span className="text-slate-500 text-[10px] block">DRIFT STATE:</span><span className={evt.severity === 'CRITICAL' ? 'text-rose-400 font-bold' : 'text-cyan-300 font-bold'}>{evt.currentState}</span></div>
+                          </div>
+
+                          {evt.severity === 'CRITICAL' && (
+                            <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+                              <span className="text-xs font-mono text-slate-400">Action: {evt.recommendedAction}</span>
+                              <button
+                                onClick={() => setIsIncidentModalOpen(true)}
+                                className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-bold"
+                              >
+                                Investigate Event
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+            {/* ALGORITHM TRANSITION MONITOR */}
+            <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium inline-block">
+                    CRYPTOGRAPHIC PRIMITIVE EVOLUTION
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    Algorithm Transition Monitor
+                  </h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
+                    Tracking progression from integer factorization algorithms to lattice-based post-quantum cryptography.
+                  </p>
+                </div>
+
+                {/* 4 Steps */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-12">
+                  {[
+                    { step: '01', title: 'RSA-2048', era: 'Legacy (Pre-2024)', col: '#EF4444', status: 'DEPRECATED', desc: 'Prime factorization vulnerability. Cracked by Shor algorithm on ~4,096 logical qubits.' },
+                    { step: '02', title: 'ECDSA P-256', era: 'Transition Era', col: '#F59E0B', status: 'CLASSICAL', desc: 'Elliptic curve discrete log. Shorter keys, zero quantum resistance against HNDL.' },
+                    { step: '03', title: 'X25519', era: 'Classical Baseline', col: '#06B6D4', status: 'ECC BASELINE', desc: 'Constant-time Montgomery curve. High performance, zero quantum resistance.' },
+                    { step: '04', title: 'ML-KEM-768 + X25519', era: 'Current Standard (FIPS 203)', col: '#10B981', status: 'PQC HYBRID', desc: 'Lattice-based Module-LWE dual guard. Quantum-safe forward secrecy.' },
+                  ].map((s, idx) => (
+                    <div key={idx} className="rounded-xl bg-[#0B1222] border p-5 flex flex-col justify-between" style={{ borderColor: `${s.col}55` }}>
+                      <div>
+                        <div className="flex justify-between text-xs font-mono text-slate-500 mb-2">
+                          <span>STEP {s.step}</span>
+                          <span style={{ color: s.col }} className="font-bold">{s.status}</span>
+                        </div>
+                        <h3 className="text-xl font-black font-mono text-white mb-1">{s.title}</h3>
+                        <div className="text-[11px] font-mono text-slate-400 mb-2">{s.era}</div>
+                        <p className="text-xs text-slate-300 leading-relaxed">{s.desc}</p>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] font-mono" style={{ color: s.col }}>
+                        {idx < 3 ? '↓ Upgraded' : '★ Gold Standard'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Warning Card */}
+                <div className="rounded-2xl bg-gradient-to-r from-rose-950/40 via-[#0D1629] to-rose-950/20 border border-rose-600/50 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700 text-[10px] font-mono font-bold">
+                        ACTIVE REGRESSION DETECTED
+                      </span>
+                      <span className="text-xs font-mono text-rose-400">CRITICAL</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Classical fallback detected</h3>
+                    <p className="text-sm text-slate-300 max-w-2xl mt-1">
+                      Payment Service reverted from hybrid key exchange (<code className="text-cyan-300 font-mono">ML-KEM-768 + X25519</code>) to classical <code className="text-amber-300 font-mono">X25519</code> during the last deployment.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsIncidentModalOpen(true)}
+                    className="px-6 py-3.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] shrink-0"
+                  >
+                    Investigate Event →
+                  </button>
+                </div>
+
+              </div>
+            </section>
+
+            {/* RISK INTELLIGENCE RANKING TABLE */}
+            <section id="risk-intelligence" className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+                  <div>
+                    <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium mb-3 inline-block">
+                      CRYPTOGRAPHIC THREAT PRIORITIZATION
+                    </span>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                      Risk Intelligence
+                    </h2>
+                    <p className="text-slate-400 text-sm sm:text-base mt-2 max-w-2xl">
+                      Prioritizing endpoints by quantum vulnerability, cipher obsolescence, and HNDL attack surface.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="bg-[#0B1222] border-t border-x border-[#1B2A4A] rounded-t-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs font-mono">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-slate-400 mr-1">PRIORITY:</span>
+                    {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((rk) => (
+                      <button
+                        key={rk}
+                        onClick={() => setFilterRisk(rk)}
+                        className={`px-3 py-1.5 rounded transition-colors ${
+                          filterRisk === rk
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 font-bold'
+                            : 'text-slate-400 hover:text-white bg-slate-900 border border-slate-800'
+                        }`}
+                      >
+                        {rk}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Search endpoint or service..."
+                    value={riskSearch}
+                    onChange={(e) => setRiskSearch(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 w-64"
+                  />
+                </div>
+
+                {/* Table */}
+                <div className="bg-[#070B14] border border-[#1B2A4A] rounded-b-xl overflow-x-auto shadow-2xl">
+                  <table className="w-full text-left text-xs font-mono divide-y divide-[#1B2A4A]">
+                    <thead className="bg-[#0B1222] text-slate-400 uppercase text-[10px]">
+                      <tr>
+                        <th className="py-3 px-4 font-bold">Endpoint</th>
+                        <th className="py-3 px-4 font-bold">Service</th>
+                        <th className="py-3 px-4 font-bold">Algorithm</th>
+                        <th className="py-3 px-4 font-bold">PQC Status</th>
+                        <th className="py-3 px-4 font-bold">Risk</th>
+                        <th className="py-3 px-4 font-bold">Reason</th>
+                        <th className="py-3 px-4 font-bold">Last Seen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/80">
+                      {filteredRiskList.map((row) => (
+                        <tr
+                          key={row.id}
+                          onClick={() => setSelectedRiskEndpoint(selectedRiskEndpoint?.id === row.id ? null : row)}
+                          className={`cursor-pointer transition-colors ${
+                            row.risk === 'CRITICAL' ? 'bg-rose-950/15 hover:bg-rose-950/30' : 'hover:bg-slate-900/60'
+                          }`}
+                        >
+                          <td className="py-3 px-4 text-cyan-400 font-bold">{row.endpoint}</td>
+                          <td className="py-3 px-4 text-white font-sans">{row.service}</td>
+                          <td className="py-3 px-4 text-slate-300">{row.algorithm}</td>
+                          <td className="py-3 px-4">
+                            <span className={
+                              row.pqcStatus === 'PQC_READY' ? 'text-emerald-400' :
+                              row.pqcStatus === 'HYBRID' ? 'text-cyan-400' :
+                              row.pqcStatus === 'CLASSICAL' ? 'text-amber-400' : 'text-rose-400 font-bold'
+                            }>{row.pqcStatus}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              row.risk === 'CRITICAL' ? 'bg-rose-950 text-rose-400 border border-rose-700 animate-pulse' :
+                              row.risk === 'HIGH' ? 'bg-amber-950 text-amber-400 border border-amber-700' :
+                              row.risk === 'MEDIUM' ? 'bg-cyan-950 text-cyan-400 border border-cyan-700' : 'bg-emerald-950 text-emerald-400 border border-emerald-700'
+                            }`}>{row.risk}</span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-300 max-w-xs truncate">{row.reason}</td>
+                          <td className="py-3 px-4 text-slate-400">{row.lastSeen}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {selectedRiskEndpoint && (
+                  <div className="mt-4 p-4 rounded-xl bg-[#0B1222] border border-cyan-500/50 text-xs font-mono space-y-2 animate-fadeIn">
+                    <div className="flex justify-between items-center text-cyan-300 font-bold">
+                      <span>DRILL-DOWN: {selectedRiskEndpoint.endpoint}</span>
+                      <button onClick={() => setSelectedRiskEndpoint(null)} className="text-slate-400 hover:text-white">✕</button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800">Reason: {selectedRiskEndpoint.reason}</div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800">HNDL Index: <strong className="text-rose-400">{selectedRiskEndpoint.hndlScore}/100</strong></div>
+                      <div className="p-2 bg-slate-950 rounded border border-slate-800">Fix: {selectedRiskEndpoint.recommendation}</div>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </section>
+
+            {/* HARVEST NOW, DECRYPT LATER (HNDL) SECTION */}
+            <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono font-medium inline-block">
+                    ASYMMETRIC CRYPTOGRAPHIC THREAT MATRIX
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
+                    Harvest Now, Decrypt Later <span className="text-rose-400 font-mono">(HNDL)</span>
+                  </h2>
+                  <p className="text-slate-300 text-base sm:text-lg">
+                    Adversaries are actively archiving encrypted cloud traffic today to decrypt on future quantum computers.
+                  </p>
+                </div>
+
+                {/* 5-Step Flow */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-16 font-mono">
+                  {[
+                    { step: '01', title: 'Traffic Today', sub: 'TLS with RSA/ECDHE', col: '#06B6D4' },
+                    { step: '02', title: 'Captured by Adversary', sub: 'Passive Optical Taps', col: '#F59E0B' },
+                    { step: '03', title: 'Stored Long-Term', sub: 'Exabyte Cold Repos', col: '#F59E0B' },
+                    { step: '04', title: 'Quantum Emerges', sub: 'CRQC Runs Shor Alg', col: '#EF4444' },
+                    { step: '05', title: 'Data Decrypted', sub: 'Full Breach Exposure', col: '#EF4444' },
+                  ].map((st, i) => (
+                    <div key={i} className="rounded-xl bg-[#0B1222] border p-4 text-center" style={{ borderColor: `${st.col}55` }}>
+                      <span className="text-xs text-slate-500 font-bold block mb-1">STAGE {st.step}</span>
+                      <h4 className="text-sm font-bold text-white mb-1">{st.title}</h4>
+                      <p className="text-[11px] text-slate-400">{st.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                  <div className="lg:col-span-7 space-y-4">
+                    <h3 className="text-2xl font-bold text-white">How QuantumShield Identifies HNDL Risk</h3>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      QuantumShield correlates network traffic classification with cryptographic strength to pinpoint vulnerable channels carrying long-lived sensitive data (financial credentials, customer PII, health records).
+                    </p>
+                    <div className="space-y-2 text-xs font-mono">
+                      <div className="p-3 bg-[#0B1222] rounded-lg border border-slate-800 text-slate-300">✓ Moscardini Theorem valuation calculates if retention life exceeds quantum transition window.</div>
+                      <div className="p-3 bg-[#0B1222] rounded-lg border border-slate-800 text-slate-300">✓ Flags endpoints where legacy key exchange protects PCI-DSS or HIPAA data scopes.</div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-5 rounded-2xl bg-[#0B1222] border border-rose-600/40 p-6 shadow-xl space-y-4 font-mono">
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+                      <span className="text-xs text-slate-400">AGGREGATE EXPOSURE</span>
+                      <span className="text-3xl font-black text-rose-400">{hndlLiveScore}%</span>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between"><span>Payment Tokens & PANs:</span><span className="text-rose-400 font-bold">94% Vuln</span></div>
+                      <div className="flex justify-between"><span>Auth Tokens & Sessions:</span><span className="text-amber-400 font-bold">78% Vuln</span></div>
+                      <div className="flex justify-between"><span>Customer PII Records:</span><span className="text-amber-400 font-bold">72% Vuln</span></div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+            {/* ARCHITECTURE SECTION */}
+            <section id="architecture" className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium inline-block">
+                    SYSTEM PIPELINE TOPOLOGY
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    End-to-End Cryptographic Architecture
+                  </h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
+                    Zero-payload eBPF packet inspection combined with sub-millisecond stream analytics for cloud-native microservices.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {ARCHITECTURE_STEPS.map((comp, idx) => (
+                    <div key={idx} className="rounded-xl bg-[#0B1222] border border-[#1B2A4A] p-5 flex flex-col justify-between hover:border-cyan-500/50 transition-colors">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                          STAGE 0{idx + 1}
+                        </span>
+                        <h3 className="text-base font-bold text-white mt-3 font-mono">{comp.title}</h3>
+                        <div className="text-xs text-cyan-400 font-mono mb-2">{comp.sub}</div>
+                        <p className="text-xs text-slate-300 leading-relaxed">{comp.desc}</p>
+                      </div>
+                      <div className="pt-3 mt-4 border-t border-slate-800 text-[11px] font-mono text-emerald-400">
+                        {comp.spec}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </section>
+
+            {/* HOW THE PLATFORM WORKS (6 STEPS) */}
+            <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium inline-block">
+                    OPERATIONAL METHODOLOGY
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    How The Platform Works
+                  </h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
+                    From initial kernel-level handshake tap to automated risk remediation across cloud-native microservices.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {HOW_IT_WORKS.map((step) => (
+                    <div key={step.num} className="rounded-2xl bg-[#0B1222] border border-[#1B2A4A] p-6 flex flex-col justify-between hover:border-cyan-500/50 transition-all">
+                      <div>
+                        <div className="text-2xl font-black font-mono text-cyan-400 mb-2">{step.num} // {step.title}</div>
+                        <h3 className="text-base font-bold text-white mb-2">{step.heading}</h3>
+                        <p className="text-xs sm:text-sm text-slate-300 mb-4 leading-relaxed">{step.description}</p>
+                      </div>
+                      <div className="pt-3 border-t border-slate-800 text-[11px] font-mono text-slate-400">
+                        <strong className="text-cyan-400">ENGINE:</strong> {step.engine}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </section>
+
+            {/* PQC READINESS SCORE (78 / 100) */}
+            <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-cyan-950/40 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-medium inline-block">
+                    NIST BENCHMARK INDEX
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    PQC Readiness Score
+                  </h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
+                    Multi-factor evaluation weighing algorithm quantum resistance, hybrid coverage, and legacy exposure.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start font-mono">
+                  <div className="lg:col-span-5 rounded-2xl bg-[#0B1222] border border-cyan-500/40 p-8 text-center space-y-4">
+                    <span className="text-xs text-cyan-400 uppercase tracking-wider block">COMPOSITE SCORE</span>
+                    <div className="text-7xl font-black text-white">78<span className="text-cyan-400 text-3xl"> / 100</span></div>
+                    <div className="text-xs text-emerald-400 font-bold">✓ NIST FIPS 203 PHASE 2 COMPLIANT</div>
+                    <p className="text-xs text-slate-400 font-sans">
+                      System is in the upper quartile of enterprise hybrid migrations with 33 of 42 microservices safely encapsulated.
+                    </p>
+                    <div className="p-3 bg-slate-950 rounded border border-slate-800 text-[11px] text-slate-400 text-left">
+                      ℹ <strong>Research Prototype Notice:</strong> Scores are illustrative simulations for cryptographic validation.
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-7 rounded-2xl bg-[#0B1222] border border-[#1B2A4A] p-6 sm:p-8 space-y-4">
+                    <div className="text-sm font-bold text-white uppercase pb-2 border-b border-slate-800">
+                      Factor Weightings
+                    </div>
+                    {[
+                      { name: 'Algorithm Strength', val: 82, col: '#10B981' },
+                      { name: 'PQC Adoption', val: 71, col: '#06B6D4' },
+                      { name: 'Hybrid Coverage', val: 76, col: '#06B6D4' },
+                      { name: 'Legacy Exposure', val: 14, col: '#EF4444' },
+                      { name: 'Drift Stability', val: 88, col: '#10B981' },
+                      { name: 'Sensitive Data Protection', val: 79, col: '#10B981' },
+                    ].map((f, i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-300">{f.name}</span>
+                          <span className="text-white font-bold">{f.val}%</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${f.val}%`, backgroundColor: f.col }}></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            </section>
+
+            {/* CASE STUDY / INCIDENT SIMULATION SECTION */}
+            <section className="py-20 bg-[#060A13] border-b border-[#1B2A4A]/70">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                
+                <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
+                  <span className="px-3 py-1 rounded-full bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs font-mono font-medium inline-block">
+                    INCIDENT FORENSIC SIMULATION
+                  </span>
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    Case Study: Detected Cryptographic Downgrade
+                  </h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
+                    Trace showing how eBPF probes caught an automatic TLS downgrade during a Kubernetes deployment.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-[#0B1222] border border-rose-600/50 p-6 sm:p-8 shadow-2xl">
+                  <div className="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-800">
+                    <div>
+                      <div className="text-xs font-mono text-rose-400 font-bold">CRITICAL SEVERITY INCIDENT</div>
+                      <h3 className="text-xl font-bold text-white mt-1">Detected Cryptographic Downgrade</h3>
+                    </div>
+                    <button
+                      onClick={() => setIsIncidentModalOpen(true)}
+                      className="px-5 py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono shadow-[0_0_15px_rgba(239,68,68,0.4)]"
+                    >
+                      View Investigation →
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-6 text-xs font-mono">
+                    <div className="p-3.5 bg-slate-950 rounded border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">PREVIOUS STATE:</span>
+                      <span className="text-emerald-400 font-bold block mt-1">ML-KEM-768 + X25519</span>
+                    </div>
+                    <div className="p-3.5 bg-slate-950 rounded border border-rose-900/60">
+                      <span className="text-slate-500 block text-[10px]">CURRENT STATE:</span>
+                      <span className="text-rose-400 font-bold block mt-1">X25519 (Classical Fallback)</span>
+                    </div>
+                    <div className="p-3.5 bg-slate-950 rounded border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">IMPACT:</span>
+                      <span className="text-white font-bold block mt-1">Quantum-Vulnerable Traffic</span>
+                    </div>
+                  </div>
+
+                  {/* Incident Timeline */}
+                  <div className="space-y-2 font-mono text-xs">
+                    {[
+                      { t: '14:21:04', e: 'Deployment started (k8s payment-svc-deployment)' },
+                      { t: '14:21:07', e: 'Payment Service restarted with misconfigured OpenSSL 3.4 provider flag' },
+                      { t: '14:21:08', e: 'TLS connection established' },
+                      { t: '14:21:08', e: 'Hybrid PQC negotiation failed (NamedGroup 0x6399 rejected)' },
+                      { t: '14:21:09', e: 'Classical fallback detected (ServerHello selected ECDHE-RSA-2048)' },
+                      { t: '14:21:09', e: 'Risk level elevated from 24 to 92' },
+                      { t: '14:21:11', e: 'Security alert generated by QuantumShield eBPF daemon' },
+                    ].map((step, idx) => (
+                      <div key={idx} className="p-2 bg-slate-950 rounded flex items-center space-x-3">
+                        <span className="text-cyan-400 font-bold">{step.t}</span>
+                        <span className="text-slate-500">➔</span>
+                        <span className="text-slate-300 font-sans">{step.e}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+
+              </div>
+            </section>
+
+            {/* FINAL CTA & FOOTER */}
+            <footer className="bg-[#040711] border-t border-[#1B2A4A] text-slate-400 text-xs font-mono">
+              <div className="py-20 border-b border-[#1B2A4A] text-center max-w-4xl mx-auto px-4 space-y-6">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
+                  Know Your Cryptographic Posture{' '}
+                  <span className="text-cyan-400">Before Quantum Does.</span>
+                </h2>
+                <p className="text-base text-slate-300 font-sans max-w-xl mx-auto">
+                  Continuously monitor, analyze and improve the cryptographic resilience of every service in your cloud.
+                </p>
+                <div className="flex justify-center gap-4 pt-2">
+                  <button
+                    onClick={() => { setCurrentView('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-400 to-cyan-300 text-slate-950 font-bold text-sm shadow-[0_0_20px_rgba(0,240,255,0.3)]"
+                  >
+                    Open Dashboard
+                  </button>
+                  <button
+                    onClick={() => scrollTo('architecture')}
+                    className="px-6 py-3 rounded-lg bg-slate-900 border border-slate-700 text-cyan-300 font-bold text-sm"
+                  >
+                    Explore Architecture
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col sm:flex-row justify-between items-center text-slate-500 text-[11px]">
+                <div>© 2026 QuantumShield Cryptographic Observability Platform. NIST FIPS 203 / CNSA 2.0.</div>
+                <div className="mt-2 sm:mt-0">Research & Enterprise Prototype. Simulated Cloud Telemetry.</div>
+              </div>
+            </footer>
+
+          </main>
+
+          {/* INCIDENT FORENSIC MODAL */}
+          {isIncidentModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+              <div className="w-full max-w-4xl bg-[#0B1222] border border-cyan-500/50 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col font-mono">
+                <div className="p-6 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Forensic Investigation: INC-2026-PQC-049</h3>
+                    <p className="text-xs text-slate-400">Target: Payment Service (payments.internal / api.stripe.com)</p>
+                  </div>
+                  <button onClick={() => setIsIncidentModalOpen(false)} className="text-slate-400 hover:text-white text-base">✕</button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-6 text-xs">
+                  <div className="p-4 rounded bg-slate-950 border border-slate-800 space-y-1">
+                    <span className="text-cyan-400 font-bold block text-sm">ROOT CAUSE HEURISTIC</span>
+                    <p className="text-slate-300 font-sans">
+                      Ingress reverse proxy renegotiation timeout triggered automatic fallback to TLS 1.2 cipher list when peer rejected <code>NamedGroup 0x6399 (ML-KEM-768)</code>.
+                    </p>
+                    <span className="text-amber-400 block pt-1">Reference: CWE-757 (Selection of Less-Secure Algorithm During Negotiation)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded bg-slate-950 border border-slate-800">
+                      <span className="text-emerald-400 font-bold block mb-2">ClientHello Offered (Extensions)</span>
+                      <pre className="text-slate-300 text-[11px] bg-slate-900 p-2.5 rounded overflow-x-auto">
+{`supported_groups:
+  - 0x6399 (x25519_kyber768 [FIPS 203])
+  - 0x001d (x25519)
+key_share:
+  - group: 0x6399 (1184 bytes payload)
+signature_algorithms:
+  - 0x0403 (ecdsa_secp256r1_sha256)`}
+                      </pre>
+                    </div>
+
+                    <div className="p-4 rounded bg-slate-950 border border-rose-900/60">
+                      <span className="text-rose-400 font-bold block mb-2">ServerHello Negotiated (Downgrade)</span>
+                      <pre className="text-slate-300 text-[11px] bg-slate-900 p-2.5 rounded overflow-x-auto">
+{`version: TLS 1.2 [DOWNGRADED]
+cipher_suite: 0xc030
+  (ECDHE-RSA-AES256-GCM-SHA384)
+key_share: NONE (Server rejected)
+downgrade_signal: Fallback to RSA-2048`}
+                      </pre>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded bg-emerald-950/20 border border-emerald-500/40 space-y-2">
+                    <span className="text-emerald-400 font-bold block text-sm">Prescribed Remediation Command</span>
+                    <div className="p-2.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 break-all select-all">
+                      <code>helm upgrade payment-svc --set security.tls.enforcePqcStrict=true --set ssl_prefer_server_ciphers=off</code>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs">
+                  <span className="text-slate-500">QuantumShield eBPF Session 0x8F92A</span>
+                  <button onClick={() => setIsIncidentModalOpen(false)} className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-white">
+                    Close Workbench
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
